@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Autonomy Maturity Assessment – GitHub Copilot in SDLC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Design Tokens ─────────────────────────────────── */
+    :root {
+      --bg:          #0a0d14;
+      --surface:     #111520;
+      --card:        #161b2e;
+      --border:      #1e2740;
+      --border-glow: #2a3a6e;
+      --text:        #e2e8f8;
+      --muted:       #7a88b0;
+      --accent:      #4f8ef7;
+      --accent2:     #7c3aed;
+      --green:       #10b981;
+      --amber:       #f59e0b;
+      --red:         #ef4444;
+
+      /* Stage colours */
+      --c0: #6b7280;  /* Manual     - grey */
+      --c1: #3b82f6;  /* Assisted   - blue */
+      --c2: #8b5cf6;  /* Aug S1     - violet */
+      --c3: #f59e0b;  /* Aug S2     - amber */
+      --c4: #10b981;  /* Native     - emerald */
+
+      --radius: 14px;
+    }
+
+    /* ─── Reset and Base ──────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Print Overrides ───────────────────────────────── */
+    @media print {
+      body { background: #fff; color: #111; font-size: 11px; }
+      .no-print { display: none !important; }
+      .page-break { page-break-before: always; }
+      section.stage-block { break-inside: avoid; }
+      .card { background: #f9f9fb !important; border: 1px solid #ccc !important; box-shadow: none !important; }
+      header { background: #1e2740 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .stage-badge, .q-chip { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pill-yes, .pill-no { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      #result-panel { display: none !important; }
+    }
+
+    /* ─── Layout ────────────────────────────────────────── */
+    .wrapper { max-width: 900px; margin: 0 auto; padding: 0 24px 80px; }
+
+    /* ─── Header ────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #0f1729 0%, #1a2456 50%, #0f1729 100%);
+      border-bottom: 1px solid var(--border-glow);
+      padding: 48px 0 40px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -20%, rgba(79,142,247,0.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .header-inner { position: relative; z-index: 1; }
+    .header-eyebrow {
+      display: inline-block;
+      background: rgba(79,142,247,0.15);
+      border: 1px solid rgba(79,142,247,0.4);
+      color: #93bbff;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 5px 16px;
+      border-radius: 99px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: clamp(22px, 4vw, 36px);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+      background: linear-gradient(135deg, #fff 30%, #93bbff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 560px;
+      margin: 0 auto 28px;
+    }
+
+    /* ─── Meta row ──────────────────────────────────────── */
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 8px;
+    }
+    .meta-field {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border-glow);
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-size: 13px;
+    }
+    .meta-field label { color: var(--muted); white-space: nowrap; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    .meta-field input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      width: 160px;
+    }
+    @media print { .meta-field input { color: #111; } }
+
+    /* ─── Stage Timeline ────────────────────────────────── */
+    .timeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 36px 0 40px;
+      overflow-x: auto;
+      padding: 4px 0;
+    }
+    .tl-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-width: 100px;
+      position: relative;
+    }
+    .tl-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 16px; right: -50%;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--border-glow), var(--border));
+      z-index: 0;
+    }
+    .tl-dot {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      z-index: 1;
+      position: relative;
+    }
+    .tl-label { font-size: 10px; color: var(--muted); text-align: center; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
+
+    /* ─── Section Title ─────────────────────────────────── */
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 48px 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ─── Instructions card ─────────────────────────────── */
+    .instr-card {
+      background: rgba(79,142,247,0.07);
+      border: 1px solid rgba(79,142,247,0.25);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 36px;
+      font-size: 13px;
+      color: #adc4f5;
+      line-height: 1.7;
+    }
+    .instr-card strong { color: #ddeeff; }
+
+    /* ─── Stage Block ───────────────────────────────────── */
+    .stage-block { margin-bottom: 40px; }
+    .stage-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .stage-badge {
+      padding: 5px 16px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .stage-name { font-size: 18px; font-weight: 700; }
+    .stage-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* ─── Question Card ─────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 10px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .card:hover { border-color: var(--border-glow); box-shadow: 0 0 0 1px rgba(79,142,247,0.1); }
+    .q-chip {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+      margin-top: 1px;
+    }
+    .q-text {
+      flex: 1;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: #d0daf5;
+    }
+    .q-area {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+    .pill-group {
+      flex-shrink: 0;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-top: 2px;
+    }
+    .pill {
+      padding: 5px 14px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .pill-yes { border-color: rgba(16,185,129,0.4); color: #6ee7b7; background: rgba(16,185,129,0.07); }
+    .pill-no  { border-color: rgba(239,68,68,0.35);  color: #fca5a5; background: rgba(239,68,68,0.07); }
+    .pill-yes:hover, .pill-yes.active { background: rgba(16,185,129,0.22); border-color: #10b981; color: #34d399; box-shadow: 0 0 10px rgba(16,185,129,0.2); }
+    .pill-no:hover,  .pill-no.active  { background: rgba(239,68,68,0.22);  border-color: #ef4444; color: #f87171; box-shadow: 0 0 10px rgba(239,68,68,0.2); }
+    .pill-na { border-color: rgba(120,120,160,0.3); color: var(--muted); background: rgba(120,120,160,0.06); }
+    .pill-na:hover, .pill-na.active { background: rgba(120,120,160,0.18); border-color: #7a88b0; }
+
+    /* ─── Scoring Panel ─────────────────────────────────── */
+    #result-panel {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border-glow);
+      border-radius: 18px;
+      padding: 20px 26px;
+      min-width: 260px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(79,142,247,0.1);
+      z-index: 1000;
+      transition: all 0.3s;
+    }
+    #result-panel h3 { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+    .stage-meter { margin-bottom: 10px; }
+    .stage-meter-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+    .meter-bar { height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .meter-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+    #stage-verdict {
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      transition: all 0.3s;
+    }
+    .print-btn {
+      display: block; width: 100%;
+      margin-top: 12px;
+      padding: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      border: none; border-radius: 10px;
+      font-size: 12px; font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      transition: opacity 0.2s;
+    }
+    .print-btn:hover { opacity: 0.9; }
+
+    /* ─── Stage colour helpers ──────────────────────────── */
+    .s0 { color: var(--c0); }  .bg0 { background: rgba(107,114,128,0.15); border-color: rgba(107,114,128,0.4); }
+    .s1 { color: var(--c1); }  .bg1 { background: rgba(59,130,246,0.15);  border-color: rgba(59,130,246,0.5); }
+    .s2 { color: var(--c2); }  .bg2 { background: rgba(139,92,246,0.15);  border-color: rgba(139,92,246,0.5); }
+    .s3 { color: var(--c3); }  .bg3 { background: rgba(245,158,11,0.15);  border-color: rgba(245,158,11,0.5); }
+    .s4 { color: var(--c4); }  .bg4 { background: rgba(16,185,129,0.15);  border-color: rgba(16,185,129,0.5); }
+
+    /* ─── Scoring note ──────────────────────────────────── */
+    .scoring-note {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 40px;
+      line-height: 1.7;
+    }
+    .scoring-note h4 { color: var(--text); margin-bottom: 8px; font-size: 13px; }
+    .scoring-note table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .scoring-note th, .scoring-note td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .scoring-note th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+
+    /* ─── Footer ────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+      padding: 32px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 60px;
+    }
+
+    @media (max-width: 640px) {
+      .pill-group { flex-direction: column; gap: 4px; }
+      #result-panel { bottom: 0; right: 0; left: 0; border-radius: 18px 18px 0 0; min-width: unset; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="wrapper header-inner">
+    <div class="header-eyebrow">GitHub Copilot · SDLC AI Maturity</div>
+    <h1>AI Autonomy Maturity Assessment</h1>
+    <p class="subtitle">A structured, yes/no questionnaire to determine where a given SDLC process sits on the AI autonomy spectrum — from Manual to Native AI.</p>
+
+    <div class="meta-row">
+      <div class="meta-field">
+        <label>Process / Workflow</label>
+        <input type="text" id="meta-process" placeholder="e.g. Code Review" />
+      </div>
+      <div class="meta-field">
+        <label>Team / Squad</label>
+        <input type="text" id="meta-team" placeholder="e.g. Platform Team" />
+      </div>
+      <div class="meta-field">
+        <label>Date</label>
+        <input type="text" id="meta-date" placeholder="YYYY-MM-DD" />
+      </div>
+      <div class="meta-field">
+        <label>Assessor</label>
+        <input type="text" id="meta-assessor" placeholder="Name / role" />
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN CONTENT -->
+<div class="wrapper">
+
+  <!-- Stage Timeline -->
+  <div class="timeline" aria-label="AI Autonomy Stages">
+    <div class="tl-item">
+      <div class="tl-dot" style="background:rgba(107,114,128,0.2);border:2px solid var(--c0);color:var(--c0)">0</div>
+      <span class="tl-label">Manual</span>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:rgba(59,130,246,0.2);border:2px solid var(--c1);color:var(--c1)">1</div>
+      <span class="tl-label">Assisted</span>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:rgba(139,92,246,0.2);border:2px solid var(--c2);color:var(--c2)">2</div>
+      <span class="tl-label">Aug S1</span>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:rgba(245,158,11,0.2);border:2px solid var(--c3);color:var(--c3)">3</div>
+      <span class="tl-label">Aug S2</span>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:rgba(16,185,129,0.2);border:2px solid var(--c4);color:var(--c4)">4</div>
+      <span class="tl-label">Native</span>
+    </div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="instr-card">
+    <strong>How to use:</strong> Answer each question with <strong>Yes</strong>, <strong>No</strong>, or <strong>N/A</strong> for the specific SDLC process named above.
+    Answer based on <em>actual current practice</em>, not aspirational state. A question marked <strong>N/A</strong> is excluded from the score for that stage.
+    The scoring panel (bottom-right) updates live and shows your current maturity stage.
+  </div>
+
+  <!-- STAGE 0 - MANUAL -->
+  <div class="section-title">Stage 0</div>
+  <section class="stage-block" id="stage-0">
+    <div class="stage-header">
+      <span class="stage-badge bg0 s0">Stage 0</span>
+      <div>
+        <div class="stage-name s0">Manual</div>
+        <div class="stage-desc">No GitHub Copilot involvement in this process</div>
+      </div>
+    </div>
+
+    <div class="card" data-stage="0" data-q="0.1">
+      <div class="q-chip bg0 s0">0.1</div>
+      <div class="q-text">
+        Is this process completed entirely without GitHub Copilot — no chat, no inline completions, no Copilot-generated content of any kind?
+        <div class="q-area">Copilot Usage Baseline</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="0" data-q="0.2">
+      <div class="q-chip bg0 s0">0.2</div>
+      <div class="q-text">
+        Does the team have no GitHub Copilot license or organisational access enabled for this process?
+        <div class="q-area">Access / Licensing</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="0" data-q="0.3">
+      <div class="q-chip bg0 s0">0.3</div>
+      <div class="q-text">
+        Are all outputs for this process (documents, code, test cases, reviews, etc.) produced entirely by humans without AI assistance?
+        <div class="q-area">Output Source</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 1 - ASSISTED -->
+  <div class="section-title">Stage 1</div>
+  <section class="stage-block" id="stage-1">
+    <div class="stage-header">
+      <span class="stage-badge bg1 s1">Stage 1</span>
+      <div>
+        <div class="stage-name s1">Assisted</div>
+        <div class="stage-desc">Copilot used ad-hoc via chat or inline completions; human drives every interaction</div>
+      </div>
+    </div>
+
+    <div class="card" data-stage="1" data-q="1.1">
+      <div class="q-chip bg1 s1">1.1</div>
+      <div class="q-text">
+        Does the team use GitHub Copilot Chat or inline suggestions at least once during this process?
+        <div class="q-area">Copilot Engagement</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="1" data-q="1.2">
+      <div class="q-chip bg1 s1">1.2</div>
+      <div class="q-text">
+        Is Copilot invoked only on demand — the human decides when and what to ask — with no pre-configured context or instructions guiding it?
+        <div class="q-area">Interaction Model</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="1" data-q="1.3">
+      <div class="q-chip bg1 s1">1.3</div>
+      <div class="q-text">
+        Is every Copilot suggestion manually reviewed and accepted or rejected by a human before it becomes part of any artefact?
+        <div class="q-area">Human-in-the-Loop</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="1" data-q="1.4">
+      <div class="q-chip bg1 s1">1.4</div>
+      <div class="q-text">
+        Are Copilot interactions limited to free-form natural language chat or in-editor completions (no structured prompt templates or shared slash commands in use)?
+        <div class="q-area">Prompt Structure</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="1" data-q="1.5">
+      <div class="q-chip bg1 s1">1.5</div>
+      <div class="q-text">
+        Is Copilot used for at least one of the following in this process: drafting code, writing documentation, generating test ideas, or answering questions about the codebase?
+        <div class="q-area">Use-Case Coverage</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="1" data-q="1.6">
+      <div class="q-chip bg1 s1">1.6</div>
+      <div class="q-text">
+        Is Copilot usage entirely informal — no agreed team conventions, prompt standards, or shared guidelines exist for this process?
+        <div class="q-area">Team Convention</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 2 - AUGMENTED S1 -->
+  <div class="section-title">Stage 2</div>
+  <section class="stage-block" id="stage-2">
+    <div class="stage-header">
+      <span class="stage-badge bg2 s2">Stage 2</span>
+      <div>
+        <div class="stage-name s2">Augmented · Stage 1</div>
+        <div class="stage-desc">Repo configured with instructions and skills; agents used; human still approves every step</div>
+      </div>
+    </div>
+
+    <div class="card" data-stage="2" data-q="2.1">
+      <div class="q-chip bg2 s2">2.1</div>
+      <div class="q-text">
+        Does the repository contain custom instruction files (e.g., .github/copilot-instructions.md or equivalent) that automatically shape Copilot's context for this process?
+        <div class="q-area">Repo Configuration</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="2" data-q="2.2">
+      <div class="q-chip bg2 s2">2.2</div>
+      <div class="q-text">
+        Are reusable prompt templates, skills, or slash commands defined and shared across the team for this process?
+        <div class="q-area">Shared Skills / Templates</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="2" data-q="2.3">
+      <div class="q-chip bg2 s2">2.3</div>
+      <div class="q-text">
+        Is at least one Copilot Agent (e.g., coding agent, test agent, review agent) configured and invoked as part of this process?
+        <div class="q-area">Agent Enablement</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="2" data-q="2.4">
+      <div class="q-chip bg2 s2">2.4</div>
+      <div class="q-text">
+        Does every agent-generated output require explicit human review and approval before progressing in the workflow (e.g., PR merge, test run trigger)?
+        <div class="q-area">Human Approval Gate</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="2" data-q="2.5">
+      <div class="q-chip bg2 s2">2.5</div>
+      <div class="q-text">
+        Are there documented team conventions (coding standards, prompt guidelines, review checklists) stored in the repository that Copilot is instructed to follow for this process?
+        <div class="q-area">Standards Codified</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="2" data-q="2.6">
+      <div class="q-chip bg2 s2">2.6</div>
+      <div class="q-text">
+        Is Copilot integrated into at least one CI/CD step for this process (e.g., automated PR description, changelog draft, test scaffolding)?
+        <div class="q-area">Pipeline Integration</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="2" data-q="2.7">
+      <div class="q-chip bg2 s2">2.7</div>
+      <div class="q-text">
+        Does the team review and update the Copilot configuration (instructions, skills) at least once per release cycle or sprint?
+        <div class="q-area">Config Maintenance</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 3 - AUGMENTED S2 -->
+  <div class="section-title">Stage 3</div>
+  <section class="stage-block" id="stage-3">
+    <div class="stage-header">
+      <span class="stage-badge bg3 s3">Stage 3</span>
+      <div>
+        <div class="stage-name s3">Augmented · Stage 2</div>
+        <div class="stage-desc">Observability, tracing, governance and security active; minimal human intervention</div>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.1">
+      <div class="q-chip bg3 s3">3.1</div>
+      <div class="q-text">
+        Is AI usage for this process logged and traceable — e.g., Copilot telemetry, audit logs, or equivalent tooling captures what was generated and when?
+        <div class="q-area">Observability and Tracing</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.2">
+      <div class="q-chip bg3 s3">3.2</div>
+      <div class="q-text">
+        Does the team have visibility into which artefacts in this process were AI-generated vs. human-authored (e.g., via commit metadata, PR labels, or traceability markers)?
+        <div class="q-area">Artefact Traceability</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.3">
+      <div class="q-chip bg3 s3">3.3</div>
+      <div class="q-text">
+        Is there an active security policy (e.g., content exclusions, secret scanning, or IP controls) applied to Copilot outputs for this process?
+        <div class="q-area">Security Policy</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.4">
+      <div class="q-chip bg3 s3">3.4</div>
+      <div class="q-text">
+        Is there a defined governance policy (responsible AI usage, acceptable-use rules, data handling) specifically covering Copilot in this process?
+        <div class="q-area">AI Governance</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.5">
+      <div class="q-chip bg3 s3">3.5</div>
+      <div class="q-text">
+        Does the team review aggregated AI usage metrics (acceptance rate, agent success rate, error rate, etc.) for this process at least once per sprint or release?
+        <div class="q-area">Metrics Review</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.6">
+      <div class="q-chip bg3 s3">3.6</div>
+      <div class="q-text">
+        Can agent-driven steps run without a human initiating each individual action (i.e., the agent self-triggers based on events such as PR opened, issue created, or test failure)?
+        <div class="q-area">Reduced Human Intervention</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.7">
+      <div class="q-chip bg3 s3">3.7</div>
+      <div class="q-text">
+        Are automated quality gates (linting, test coverage thresholds, security scans) enforced on all AI-generated outputs before any human review takes place?
+        <div class="q-area">Automated Quality Gates</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="3" data-q="3.8">
+      <div class="q-chip bg3 s3">3.8</div>
+      <div class="q-text">
+        Is there an escalation or override mechanism by which a human can pause, reject, or roll back any AI-driven action in this process?
+        <div class="q-area">Human Override Capability</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 4 - NATIVE -->
+  <div class="section-title">Stage 4</div>
+  <section class="stage-block" id="stage-4">
+    <div class="stage-header">
+      <span class="stage-badge bg4 s4">Stage 4</span>
+      <div>
+        <div class="stage-name s4">Native AI</div>
+        <div class="stage-desc">Fully automated end-to-end; security, governance and observability built-in; no routine human intervention</div>
+      </div>
+    </div>
+
+    <div class="card" data-stage="4" data-q="4.1">
+      <div class="q-chip bg4 s4">4.1</div>
+      <div class="q-text">
+        Does this process run end-to-end without requiring any routine human action — agents initiate, execute, validate, and close the workflow autonomously?
+        <div class="q-area">Full Automation</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="4" data-q="4.2">
+      <div class="q-chip bg4 s4">4.2</div>
+      <div class="q-text">
+        Are security controls (secret detection, SAST, dependency vulnerability checks) integrated into every automated step of this process without human initiation?
+        <div class="q-area">Embedded Security</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="4" data-q="4.3">
+      <div class="q-chip bg4 s4">4.3</div>
+      <div class="q-text">
+        Is governance (policy compliance, IP checking, usage caps) enforced automatically as part of the pipeline with no manual policy review step?
+        <div class="q-area">Automated Governance</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="4" data-q="4.4">
+      <div class="q-chip bg4 s4">4.4</div>
+      <div class="q-text">
+        Is full end-to-end observability in place — dashboards, alerts, traces — that automatically flags anomalies in AI behaviour without someone having to manually check logs?
+        <div class="q-area">Active Observability</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="4" data-q="4.5">
+      <div class="q-chip bg4 s4">4.5</div>
+      <div class="q-text">
+        Can the system self-heal or automatically retry failed AI-driven steps without human intervention (e.g., re-run agent on test failure, auto-fix lint errors)?
+        <div class="q-area">Self-Healing</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="4" data-q="4.6">
+      <div class="q-chip bg4 s4">4.6</div>
+      <div class="q-text">
+        Is human involvement in this process limited only to exception handling or strategic decisions — no routine approvals, triggers, or manual steps required?
+        <div class="q-area">Exception-Only Human Role</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+
+    <div class="card" data-stage="4" data-q="4.7">
+      <div class="q-chip bg4 s4">4.7</div>
+      <div class="q-text">
+        Does the system automatically update or refine Copilot configuration (instructions, skills, agent policies) based on measured outcomes without requiring manual edits?
+        <div class="q-area">Continuous Self-Improvement</div>
+      </div>
+      <div class="pill-group">
+        <button class="pill pill-yes" onclick="answer(this,'yes')">Yes</button>
+        <button class="pill pill-no"  onclick="answer(this,'no')">No</button>
+        <button class="pill pill-na"  onclick="answer(this,'na')">N/A</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCORING GUIDE -->
+  <div class="scoring-note page-break">
+    <h4>Scoring and Interpretation Guide</h4>
+    <p>For each stage, count the number of <strong>Yes</strong> answers (N/A questions are excluded from the denominator).<br/>
+    The <strong>highest stage where 75% or more of applicable questions are answered Yes</strong> is the current maturity stage for this process.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Stage</th>
+          <th>Label</th>
+          <th># Qs</th>
+          <th>Threshold to pass</th>
+          <th>Indicative signal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong class="s0">0</strong></td><td>Manual</td><td>3</td><td>3 / 3 Yes</td><td>No Copilot in use at all</td></tr>
+        <tr><td><strong class="s1">1</strong></td><td>Assisted</td><td>6</td><td>5 / 6 Yes</td><td>Ad-hoc chat and completions only</td></tr>
+        <tr><td><strong class="s2">2</strong></td><td>Augmented S1</td><td>7</td><td>6 / 7 Yes</td><td>Repo configured, agents running</td></tr>
+        <tr><td><strong class="s3">3</strong></td><td>Augmented S2</td><td>8</td><td>6 / 8 Yes</td><td>Observability, security and governance active</td></tr>
+        <tr><td><strong class="s4">4</strong></td><td>Native</td><td>7</td><td>6 / 7 Yes</td><td>Fully autonomous, exception-only human role</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px"><strong>Note:</strong> A process must satisfy lower-stage thresholds before higher stages are considered. If Stage 0 is fully true, the process is Manual regardless of other answers.</p>
+  </div>
+
+</div>
+
+<!-- LIVE SCORING PANEL -->
+<div id="result-panel" class="no-print">
+  <h3>Live Score</h3>
+
+  <div class="stage-meter">
+    <div class="stage-meter-label"><span class="s1">Assisted</span><span id="pct-1">0%</span></div>
+    <div class="meter-bar"><div class="meter-fill" id="bar-1" style="width:0%;background:var(--c1)"></div></div>
+  </div>
+  <div class="stage-meter">
+    <div class="stage-meter-label"><span class="s2">Aug S1</span><span id="pct-2">0%</span></div>
+    <div class="meter-bar"><div class="meter-fill" id="bar-2" style="width:0%;background:var(--c2)"></div></div>
+  </div>
+  <div class="stage-meter">
+    <div class="stage-meter-label"><span class="s3">Aug S2</span><span id="pct-3">0%</span></div>
+    <div class="meter-bar"><div class="meter-fill" id="bar-3" style="width:0%;background:var(--c3)"></div></div>
+  </div>
+  <div class="stage-meter">
+    <div class="stage-meter-label"><span class="s4">Native</span><span id="pct-4">0%</span></div>
+    <div class="meter-bar"><div class="meter-fill" id="bar-4" style="width:0%;background:var(--c4)"></div></div>
+  </div>
+
+  <div id="stage-verdict">Answer questions to see your stage</div>
+  <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrapper">
+    AI Autonomy Maturity Assessment · GitHub Copilot in SDLC · v1.0<br/>
+    Process-agnostic — applicable to any stage of the software development lifecycle.
+  </div>
+</footer>
+
+<script>
+  const answers = {};
+  const THRESHOLDS = { 0: 1.0, 1: 0.75, 2: 0.75, 3: 0.75, 4: 0.75 };
+
+  const STAGE_LABELS = [
+    { label: 'Manual',          color: 'var(--c0)', bg: 'rgba(107,114,128,0.15)' },
+    { label: 'Assisted',        color: 'var(--c1)', bg: 'rgba(59,130,246,0.18)'  },
+    { label: 'Augmented S1',    color: 'var(--c2)', bg: 'rgba(139,92,246,0.18)'  },
+    { label: 'Augmented S2',    color: 'var(--c3)', bg: 'rgba(245,158,11,0.18)'  },
+    { label: 'Native AI',       color: 'var(--c4)', bg: 'rgba(16,185,129,0.18)'  },
+  ];
+
+  function answer(btn, value) {
+    const card = btn.closest('.card');
+    const qId  = card.dataset.q;
+    answers[qId] = value;
+    card.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    updateScore();
+  }
+
+  function getStageQuestions(stage) {
+    return [...document.querySelectorAll('.card[data-stage="' + stage + '"]')]
+      .map(c => c.dataset.q);
+  }
+
+  function stageScore(stage) {
+    const qs = getStageQuestions(stage);
+    let yes = 0, applicable = 0;
+    for (const q of qs) {
+      const a = answers[q];
+      if (!a || a === 'na') continue;
+      applicable++;
+      if (a === 'yes') yes++;
+    }
+    return { yes, applicable, pct: applicable > 0 ? yes / applicable : 0 };
+  }
+
+  function updateScore() {
+    for (let s = 1; s <= 4; s++) {
+      const { pct } = stageScore(s);
+      const pctStr = Math.round(pct * 100) + '%';
+      document.getElementById('pct-' + s).textContent = pctStr;
+      document.getElementById('bar-' + s).style.width = pctStr;
+    }
+
+    const s0 = stageScore(0);
+    let verdict;
+
+    if (s0.applicable > 0 && s0.pct >= THRESHOLDS[0]) {
+      verdict = 0;
+    } else {
+      verdict = -1;
+      for (let s = 1; s <= 4; s++) {
+        const { pct, applicable } = stageScore(s);
+        if (applicable > 0 && pct >= THRESHOLDS[s]) verdict = s;
+      }
+    }
+
+    const panel = document.getElementById('stage-verdict');
+    if (verdict === -1) {
+      panel.style.background = 'rgba(255,255,255,0.05)';
+      panel.style.color = 'var(--muted)';
+      panel.textContent = 'Keep answering...';
+    } else {
+      const info = STAGE_LABELS[verdict];
+      panel.style.background = info.bg;
+      panel.style.color = info.color;
+      panel.textContent = 'Stage ' + verdict + ': ' + info.label;
+    }
+  }
+
+  document.getElementById('meta-date').placeholder =
+    new Date().toISOString().slice(0, 10);
+</script>
+
+</body>
+</html>
